@@ -340,9 +340,140 @@ python scripts/03_etl_extract.py        # E: baca data kotor
 python scripts/04_etl_transform.py      # T: cleansing
 python scripts/05_etl_load.py           # L: load ke DWH
 
-# Tahap 3: Query
+# Tahap 3: Query Manual & Analitik
 # → buka data/processed/olist_dwh.db di SQLite Viewer
 # → jalankan query dari sql/02_analytical_queries.sql
+
+# Tahap 4: Dashboard Interaktif & Scheduler
+streamlit run app.py
+
+# Tahap 5: Jalankan Pengujian Validasi
+python tests/test_dashboard.py
 ```
 
-> **Catatan:** Jika ingin menjalankan ulang ETL dari awal, hapus dulu file `data/processed/olist_dwh.db` sebelum menjalankan `05_etl_load.py`.
+> **Catatan:** Jika ingin menjalankan ulang ETL dari awal, hapus dulu file `data/processed/olist_dwh.db` sebelum menjalankan `05_etl_load.py` atau gunakan tombol **Run ETL Now** pada halaman ETL Scheduler di dashboard.
+
+---
+
+## 📊 Dashboard Interaktif & ETL Scheduler
+
+Repositori ini kini dilengkapi dengan web interface modern berbasis **Streamlit**, **Plotly**, dan **APScheduler** untuk mengeksplorasi Data Warehouse, memonitor metrik bisnis, memvisualisasikan Star Schema, dan mengontrol eksekusi pipeline ETL secara terjadwal.
+
+### 1. Struktur Modul Dashboard
+
+```
+dashboard/
+├── __init__.py
+├── db.py                 # Query helper aman, connection pool, PRAGMA query_only
+├── styles.py             # Custom CSS dark theme & glassmorphism styling
+├── scheduler_engine.py   # APScheduler engine, subprocess execution & SQLite run logs
+└── pages/
+    ├── overview.py       # 📋 Ringkasan eksekutif (Total order, omzet, review, produk)
+    ├── analytics.py      # 📈 Visualisasi tren bulanan, status pesanan, top produk, geografi
+    ├── explorer.py       # 🗄️ Eksplorasi fisik tabel Fact & Dimensi (paginasi & filter)
+    ├── star_schema.py    # ⭐ Diagram visual ER / Star Schema interaktif & relasi FK
+    ├── scheduler.py      # ⏰ Kontrol scheduler (Start/Stop, Run Now, interval kustom)
+    └── etl_logs.py       # 📝 Riwayat eksekusi ETL & live audit kualitas data
+app.py                    # Entry point aplikasi Streamlit
+tests/
+└── test_dashboard.py     # Test suite validasi otomatis
+```
+
+### 2. Cara Menjalankan Dashboard
+
+Pastikan virtual environment telah aktif dan dependensi terpasang:
+
+```bash
+# Aktifkan virtual environment (Windows PowerShell)
+.\venv\Scripts\Activate.ps1
+# Atau Linux/macOS:
+# source venv/bin/activate
+
+# Install dependensi (jika belum)
+pip install -r requirements.txt
+
+# Jalankan dashboard
+streamlit run app.py
+```
+
+Setelah perintah dijalankan, antarmuka web akan otomatis terbuka di browser pada alamat default `http://localhost:8501`.
+
+---
+
+### 3. Panduan Fitur Setiap Halaman
+
+#### 📋 A. Overview (Ringkasan Eksekutif)
+- **KPI Cards:** Menampilkan metrik utama dari database DWH secara langsung:
+  - Total Orders (pesanan unik)
+  - Total Reviews (ulasan pelanggan)
+  - Total Customers & Sellers
+  - Total Revenue (R$) dari penjumlahan `total_value` pada `fact_orders`
+  - Average Order Value (AOV) & Average Delivery Days
+  - Average Review Score (skor rata-rata 1–5)
+- **DWH Table Summary:** Ringkasan jumlah baris dan jumlah kolom untuk seluruh 6 tabel.
+
+#### 📈 B. Analytics (Visualisasi Analitik Interaktif)
+- **Filter Interaktif:** Multi-select filter berdasarkan Tahun (2016–2018), State Pelanggan, dan Status Pesanan.
+- **Visualisasi Plotly:**
+  - *Monthly Order & Revenue Trends:* Garis tren volume pesanan dan total omzet per bulan.
+  - *Order Status Distribution:* Donut chart proporsi status pesanan (`delivered`, `shipped`, dll).
+  - *Geographic Distribution:* Bar chart persebaran pesanan per provinsi/negara bagian pelanggan.
+  - *Top 10 Product Categories:* Peringkat kategori produk berdasarkan omzet dan volume item terjual.
+  - *Seller Performance:* Konsentrasi pesanan per kota seller.
+  - *Review Score Distribution:* Histogram skor ulasan 1 sampai 5.
+  - *Review Score Over Time:* Tren kepuasan pelanggan bulanan.
+
+#### 🗄️ C. Fact & Dimension Explorer
+- **Pemilihan Tabel:** Dropdown untuk memilih salah satu dari 6 tabel DWH (dikelompokkan rapi antara Fact Table dan Dimension Table).
+- **Metadata Skema:** Menampilkan nama kolom, tipe data SQLite, Primary Key (🔑), Foreign Key (🔗), dan batasan Not Null.
+- **Paginasi Efisien:** Menampilkan data dengan opsi limit (10, 25, 50, 100 baris per halaman) tanpa memuat seluruh tabel ke memori.
+- **Pencarian Kolom:** Filter baris secara dinamis berdasarkan kolom yang dipilih menggunakan parameterized SQL `LIKE`.
+- **Ekspor Data:** Fitur download CSV hanya untuk data halaman yang sedang dilihat.
+
+#### ⭐ D. Star Schema Visualizer
+- **Diagram ER:** Representasi visual diagram Star Schema menggunakan format Mermaid ER diagram.
+- **Detail Entitas:** Accordion interaktif untuk memeriksa Primary Key, Foreign Keys, dan Measure/Attributes tiap tabel.
+- **Tabel Ringkasan Relasi:** Daftar lengkap hubungan `fact_orders` dan `fact_reviews` ke tabel dimensi `dim_date`, `dim_customer`, `dim_product`, dan `dim_seller` yang ditegakkan langsung oleh SQLite Foreign Key constraints.
+
+#### ⏰ E. ETL Scheduler
+- **Kontrol Eksekusi:**
+  - Tombol **Run ETL Now** untuk menjalankan pipeline `scripts/06_run_etl_pipeline.py` secara langsung.
+  - Tombol **Start Scheduler** dan **Stop Scheduler** untuk mengaktifkan automasi berkala di background.
+  - Pengaturan interval eksekusi: *Every 30 minutes*, *Every 1 hour*, *Every 6 hours*, *Every 12 hours*, *Daily*, *Weekly*, atau *Custom (menit)*.
+- **Pencegahan Overlapping Runs:** Menggunakan threading lock internal agar pipeline tidak dijalankan bersamaan saat eksekusi sebelumnya masih berjalan.
+- **Isolasi Subprocess:** Pipeline dieksekusi sebagai subprocess Python terpisah sehingga jika terjadi error tidak akan membuat server dashboard crash.
+- **Log Execution:** Menampilkan status terkini (Running, Idle, Active), waktu run berikutnya, durasi eksekusi, serta log stdout/stderr detail.
+
+#### 📝 F. ETL Logs & Data Quality
+- **Riwayat Run:** Riwayat lengkap eksekusi ETL tersimpan di tabel internal `etl_log`.
+- **Live Data Quality Checks:** Melakukan audit langsung terhadap data DWH saat ini:
+  - *Key Column Integrity:* Memeriksa nilai NULL pada Foreign Key di fact tables.
+  - *Referential Integrity (Orphan Detection):* Memastikan tidak ada foreign key yang tidak ditemukan di tabel dimensi.
+  - *Business Logic Checks:* Validasi nilai harga > 0, freight >= 0, skor review antara 1–5, dan tanggal pengiriman valid.
+  - *Row Count Audit:* Memantau volume data di seluruh tabel DWH.
+
+---
+
+### 4. Verifikasi dan Pengujian Otomatis
+
+Repositori menyediakan skrip pengujian komprehensif di `tests/test_dashboard.py` untuk memvalidasi:
+1. Koneksi SQLite database.
+2. Keberadaan seluruh 6 tabel DWH (`dim_date`, `dim_customer`, `dim_product`, `dim_seller`, `fact_orders`, `fact_reviews`).
+3. Ketersediaan data (row counts > 0).
+4. Kebenaran agregasi SQL (omzet, skor review, formula harga).
+5. Integritas referensial (Foreign Key integrity antar tabel fact dan dimensi).
+6. Import kelengkapan dependensi modul dashboard.
+7. Fungsi-fungsi helper modul database (`query_df`, `get_table_preview`, pagination).
+8. Keberadaan skrip entrypoint ETL.
+9. Mekanisme lock dan pencegahan overlapping runs scheduler.
+10. Penanganan query kosong / filter tanpa hasil match.
+
+Jalankan test suite menggunakan perintah:
+
+```bash
+python tests/test_dashboard.py
+```
+
+### 5. Batasan & Pertimbangan Teknis (Known Limitations)
+- **Konkurensi Database SQLite:** SQLite mengizinkan banyak pembaca (*concurrent reads*) namun mengunci database saat ada proses penulisan (*single writer*). Dashboard mengaktifkan `PRAGMA query_only = ON` pada koneksi read-only dan `timeout=30` agar aktivitas browsing tidak terganggu selama proses ETL berlangsung.
+- **Durasi Eksekusi ETL:** Eksekusi pipeline ETL lengkap pada ~100.000+ baris data memerlukan waktu sekitar 20–40 detik. Selama proses ini berlangsung, tombol *Run ETL Now* akan dinonaktifkan untuk mencegah tumpang tindih proses.
